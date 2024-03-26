@@ -21,6 +21,13 @@ from IPython import embed
 embeddings = True
 
 
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
+
+
 def backtransform(df):
     df["yhat"] = np.exp(df["yhat"]) - 1
     return df
@@ -86,8 +93,8 @@ class FF_NN_emb(nn.Module):
 
     def forward(self, X):
         if embeddings == True:
-            X_store_embed = self.store_embedding(X[:, -2].type(torch.LongTensor))
-            X_family_embed = self.family_embedding(X[:, -1].type(torch.LongTensor))
+            X_store_embed = self.store_embedding(X[:, -2].type(torch.LongTensor).to(device))
+            X_family_embed = self.family_embedding(X[:, -1].type(torch.LongTensor).to(device))
             X = torch.cat([X[:, :-2], X_family_embed.squeeze(), X_store_embed.squeeze()], dim=1)
         return self.mlp(X)
 
@@ -213,12 +220,6 @@ def main(args):
         features += df_train_full.loc[:, df_train_full.columns.str.endswith('_enc')].columns.tolist()
     else:
         features += df_train_full.loc[:, df_train_full.columns.str.endswith('_onehot_family')].columns.tolist() + df_train_full.loc[:, df_train_full.columns.str.endswith('_onehot_store')].columns.tolist()
-
-    if torch.cuda.is_available():
-        dev = "cuda:0"
-    else:
-        dev = "cpu"
-    device = torch.device(dev)
 
     train_target = torch.tensor(df_train["sales_transformed"].astype(np.float32)).unsqueeze(1).to(device)
     train = torch.tensor(df_train[features].values.astype(np.float32)).to(device)
