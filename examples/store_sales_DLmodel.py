@@ -36,8 +36,6 @@ def feature_engineering(df):
     df['dayofweek'] = df['date'].dt.dayofweek
     df['dayofyear'] = df['date'].dt.dayofyear
     df['dayofmonth'] = df['date'].dt.day
-    df['midofmonthpayout'] = np.where(df['dayofmonth'] == 16, 1, 0)
-    df['endofmonthpayout'] = np.where(df['dayofmonth'] == 31, 1, 0)
 
     df['td'] = (df['date'] - pd.to_datetime("2013-01-01")).dt.days
 
@@ -239,11 +237,12 @@ def main(args):
     epochs = 20
     trained_model = fit(epochs, model, optimizer, train_dl, valid_dl)
 
-    # validation training
+    # training data
     df_train["yhat"] = trained_model(train_ds[:][0]).cpu().detach().numpy().flatten()
     df_train["yhat"] = np.clip(df_train["yhat"], 0, None)
     df_train = backtransform(df_train)
     train_evaluation(df_train["sales"], df_train["yhat"])
+    # validation data
     df_val["yhat"] = trained_model(val_ds[:][0]).cpu().detach().numpy().flatten()
     df_val["yhat"] = np.clip(df_val["yhat"], 0, None)
     df_val = backtransform(df_val)
