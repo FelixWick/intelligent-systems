@@ -10,10 +10,8 @@ from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
 
 import torch
 import torch.nn.functional as F
-from torch import nn
-from torch import optim
-from torch.utils.data import TensorDataset
-from torch.utils.data import DataLoader
+from torch import nn, optim
+from torch.utils.data import TensorDataset, DataLoader
 
 from IPython import embed
 
