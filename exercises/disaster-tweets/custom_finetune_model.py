@@ -1,4 +1,5 @@
 import sys
+import os
 
 import torch
 import torch.nn.functional as F
@@ -17,7 +18,7 @@ from transformers import AutoTokenizer, DistilBertModel
 from IPython import embed
 
 
-access_token='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'
+access_token = os.environ['HF_TOKEN']
 
 
 if torch.cuda.is_available():       

@@ -1,4 +1,5 @@
 import sys
+import os
 
 import torch
 import torch.nn.functional as F
@@ -18,7 +19,7 @@ import evaluate
 from IPython import embed
 
 
-access_token='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'
+access_token = os.environ['HF_TOKEN']
 
 
 def evaluation(y, yhat):

@@ -1,10 +1,12 @@
+import os
+
 from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments
 from peft import LoraConfig
 from trl import SFTTrainer
 from datasets import load_dataset
 
 
-access_token='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'
+access_token = os.environ['HF_TOKEN']
 
 
 def finetuning():
