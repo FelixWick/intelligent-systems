@@ -45,23 +45,22 @@ class DistilBertClassifier(nn.Module):
         embedding_dim = 20
         self.keyword_embedding = nn.Embedding(222, embedding_dim)
 
-        D_in, D_out = 768, 2
+        D_in, D_out = 768 + embedding_dim, 2
         self.pre_classifier = nn.Linear(D_in, D_in)
         self.dropout = nn.Dropout(0.2)
-        self.classifier = nn.Linear(D_in + embedding_dim, D_out)
+        self.classifier = nn.Linear(D_in, D_out)
 
     def forward(self, input_ids, attention_mask, train_keyword):
         base_output = self.base_model(input_ids, attention_mask)
         hidden_state = base_output[0]
         pooled_output = hidden_state[:, 0]
 
-        pooled_output = self.pre_classifier(pooled_output)
-        pooled_output = nn.ReLU()(pooled_output)
-        pooled_output = self.dropout(pooled_output)
-
         X_keyword_embed = self.keyword_embedding(train_keyword.type(torch.LongTensor).to(device))
         X = torch.cat([pooled_output, X_keyword_embed], dim=1)
 
+        X = self.pre_classifier(X)
+        X = nn.ReLU()(X)
+        X = self.dropout(X)
         logits = self.classifier(X)
         return logits
 
@@ -95,7 +94,7 @@ def fit(epochs, model, optimizer, train_dl):
 def tokenization(tokenizer, text_data):
     encoded_corpus = tokenizer(
         text_data,
-        max_length=157,
+        max_length=300,
         padding="max_length",
         truncation=True,
         return_attention_mask=True
@@ -134,7 +133,7 @@ def main(args):
 
     df_train, df_val = train_test_split(df_train_full, test_size=0.2, random_state=666)
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased", token=access_token)
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", token=access_token)
 
     # finetuning
     input_ids_train, attention_mask_train = tokenization(tokenizer, df_train["text"].tolist())
@@ -146,8 +145,8 @@ def main(args):
     model = DistilBertClassifier()
     print(model)
 
-    for param in model.base_model.parameters():
-        param.requires_grad = False
+    # for param in model.base_model.parameters():
+        # param.requires_grad = False
 
     labels = torch.tensor(df_train["target"].tolist()).to(device)
 

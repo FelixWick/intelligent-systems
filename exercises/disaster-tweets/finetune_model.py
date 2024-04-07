@@ -31,7 +31,7 @@ def evaluation(y, yhat):
 
 def finetuning(train_data, val_data, tokenizer):
     model = DistilBertForSequenceClassification.from_pretrained(
-        "distilbert-base-cased",
+        "distilbert-base-uncased",
         num_labels = 2,
     )
     print(model)
@@ -39,8 +39,8 @@ def finetuning(train_data, val_data, tokenizer):
     # for param in model.base_model.parameters():
     #     param.requires_grad = False
 
-    train_data = train_data.map(lambda samples: tokenizer(samples["text"], padding="max_length", truncation=True), batched=True)
-    val_data = val_data.map(lambda samples: tokenizer(samples["text"], padding="max_length", truncation=True), batched=True)
+    train_data = train_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
+    val_data = val_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
     metric = evaluate.load("accuracy")
 
     def compute_metrics(eval_pred):
@@ -137,7 +137,7 @@ def main(args):
     train_data = train_data.remove_columns(['location', '__index_level_0__'])
     val_data = val_data.remove_columns(['location', '__index_level_0__'])
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased", token=access_token)
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", token=access_token)
 
     # validation
     finetuning(train_data, val_data, tokenizer)
