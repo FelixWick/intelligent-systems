@@ -42,7 +42,9 @@ class DistilBertClassifier(nn.Module):
         self.base_model = DistilBertModel.from_pretrained("distilbert-base-uncased").to(device)
         print(self.base_model)
 
-        D_in, D_out = 769, 2
+        self.keyword_embedding = nn.Embedding(222, 50)
+
+        D_in, D_out = 818, 2
         self.classifier = nn.Sequential(
             nn.Linear(D_in, D_in),
             nn.ReLU(),
@@ -55,7 +57,8 @@ class DistilBertClassifier(nn.Module):
         hidden_state = base_output[0]
         pooled_output = hidden_state[:, 0]
 
-        X = torch.cat([pooled_output, train_keyword.unsqueeze(1)], dim=1)
+        X_keyword_embed = self.keyword_embedding(train_keyword.type(torch.LongTensor).to(device))
+        X = torch.cat([pooled_output, X_keyword_embed], dim=1)
 
         return self.classifier(X)
 
