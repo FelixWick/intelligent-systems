@@ -145,8 +145,8 @@ def main(args):
     model = DistilBertClassifier()
     print(model)
 
-    # for param in model.base_model.parameters():
-        # param.requires_grad = False
+    for param in model.base_model.parameters():
+        param.requires_grad = False
 
     labels = torch.tensor(df_train["target"].tolist()).to(device)
 
