@@ -145,15 +145,16 @@ def main(args):
     model = DistilBertClassifier()
     print(model)
 
-    for param in model.base_model.parameters():
-        param.requires_grad = False
+    # for param in model.base_model.parameters():
+        # param.requires_grad = False
 
     labels = torch.tensor(df_train["target"].tolist()).to(device)
 
     train_dataset = TensorDataset(input_ids_train.to(device), attention_mask_train.to(device), labels, train_keyword)
     train_dl = DataLoader(train_dataset, batch_size=8, shuffle=True)
 
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(model.parameters(), lr=2e-5)
+    # optimizer = optim.AdamW(model.parameters(), lr=5e-5)
     epochs = 2
     trained_model = fit(epochs, model.to(device), optimizer, train_dl)
 
