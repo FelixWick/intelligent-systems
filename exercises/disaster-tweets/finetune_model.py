@@ -68,18 +68,19 @@ def finetuning(train_data, val_data, tokenizer):
 
 def llm_predict(data, tokenizer, model):
     yhats = []
+    yhats_prob = []
     ys = []
     for sample in data:
         input_ids = tokenizer(sample["text"], return_tensors="pt")
         outputs = F.softmax(model(**input_ids)[0], dim=1).detach().numpy()
+        yhat_prob = outputs[:, 1]
+        yhats_prob.append(yhat_prob)
         yhat = np.argmax(outputs, axis=1)
         yhats.append(yhat[0])
         y = sample["label"]
         ys.append(y)
 
-    evaluation(np.array(ys), np.array(yhats))
-
-    return np.array(yhats)
+    return np.array(ys), np.array(yhats), np.array(yhats_prob)
 
 
 def keyword_stack(train_data, test_data, yhat_train, yhat_test):
@@ -144,32 +145,41 @@ def main(args):
 
     model = DistilBertForSequenceClassification.from_pretrained("outputs")
 
-    yhat_train = llm_predict(train_data, tokenizer, model)
-    yhat_val = llm_predict(val_data, tokenizer, model)
+    y_train, yhat_train_llm, yhat_train_llm_prob = llm_predict(train_data, tokenizer, model)
+    evaluation(y_train, yhat_train_llm)
 
-    yhat_train, yhat_val = keyword_stack(train_data, val_data, yhat_train, yhat_val)
-    evaluation(np.array(train_data["label"]), yhat_train)
-    evaluation(np.array(val_data["label"]), yhat_val)
+    y_val, yhat_val_llm, yhat_val_llm_prob = llm_predict(val_data, tokenizer, model)
+    evaluation(y_val, yhat_val_llm)
+
+    yhat_train_stacked, yhat_val_stacked = keyword_stack(train_data, val_data, yhat_train_llm_prob, yhat_val_llm_prob)
+    evaluation(np.array(train_data["label"]), yhat_train_stacked)
+    evaluation(np.array(val_data["label"]), yhat_val_stacked)
 
     # test
     finetuning(train_data_full, val_data, tokenizer)
 
     model = DistilBertForSequenceClassification.from_pretrained("outputs")
 
-    yhat_train_full = llm_predict(train_data_full, tokenizer, model)
+    y_train_full, yhat_train_full_llm, yhat_train_full_llm_prob = llm_predict(train_data_full, tokenizer, model)
+    evaluation(y_train_full, yhat_train_full_llm)
 
     yhats = []
+    yhats_prob = []
     for sample in test_data:
         input_ids = tokenizer(sample["text"], return_tensors="pt")
         outputs = F.softmax(model(**input_ids)[0], dim=1).detach().numpy()
+        yhat_prob = outputs[:, 1]
+        yhats_prob.append(yhat_prob)
         yhat = np.argmax(outputs, axis=1)
         yhats.append(yhat[0])
-    yhat_test = np.array(yhats)
+    yhat_test_llm_prob = np.array(yhats_prob)
+    yhat_test_llm = np.array(yhats)
 
-    yhat_train_full, yhat_test = keyword_stack(train_data_full, test_data, yhat_train_full, yhat_test)
-    evaluation(np.array(train_data_full["label"]), yhat_train_full)
+    yhat_train_full_stacked, yhat_test_stacked = keyword_stack(train_data_full, test_data, yhat_train_full_llm_prob, yhat_test_llm_prob)
+    evaluation(y_train_full, yhat_train_full_stacked)
 
-    pd.concat([df_test["id"], pd.Series(yhat_test, name="target")], axis=1).to_csv("submission.csv", index=False)
+    # pd.concat([df_test["id"], pd.Series(yhat_test_stacked, name="target")], axis=1).to_csv("submission.csv", index=False)
+    pd.concat([df_test["id"], pd.Series(yhat_test_llm, name="target")], axis=1).to_csv("submission.csv", index=False)
 
     embed()
 
