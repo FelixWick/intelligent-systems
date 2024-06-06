@@ -35,10 +35,27 @@ def generate(prompt, data=None):
 You will only respond with 1 or 0. Do not provide any explanations or notes."""
 
     if data:
-        prompt = """Use this example and its classification in the end: {}.
-Classify this tweet: <<<{}>>>""".format(data, prompt)
+        text = data[:-2]
+        label = data[-1]
+        example_string = """
+####
+Here is a similar example:
+
+Inquiry: {}
+{}
+####
+""".format(text, label)
     else:
-        prompt = f"Classify this tweet: <<<{prompt}>>>"
+        example_string = ""
+
+    # 0.72 F1 score with closest example (0.74 without example, 0.77 with two generic ones)
+    prompt = example_string + """
+<<<
+Inquiry: {}
+>>>""".format(prompt)
+
+    # print(instruction)
+    # print(prompt)
 
     json_data = {
         "model": "mistral",

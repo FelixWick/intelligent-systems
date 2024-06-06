@@ -145,9 +145,6 @@ def main(args):
     model = DistilBertClassifier()
     print(model)
 
-    # for param in model.base_model.parameters():
-        # param.requires_grad = False
-
     labels = torch.tensor(df_train["target"].tolist()).to(device)
 
     train_dataset = TensorDataset(input_ids_train.to(device), attention_mask_train.to(device), labels, train_keyword)
@@ -176,6 +173,7 @@ def main(args):
     yhat, y = predict(inference_model, test_dl)
 
     evaluation(y, yhat)
+    # F1 score 0.83 (0.82 for finetuning without keyword)
 
     embed()
 

@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 
 from sklearn.metrics import accuracy_score, f1_score
-from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 
 from transformers import AutoTokenizer, TrainingArguments, Trainer, DistilBertForSequenceClassification
@@ -38,6 +37,7 @@ def finetuning(train_data, val_data, tokenizer):
 
     # for param in model.base_model.parameters():
     #     param.requires_grad = False
+    # only 0.75 F1 score without finetuning pre-trained layers (0.82 with)
 
     train_data = train_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
     val_data = val_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
@@ -68,49 +68,16 @@ def finetuning(train_data, val_data, tokenizer):
 
 def llm_predict(data, tokenizer, model):
     yhats = []
-    yhats_prob = []
     ys = []
     for sample in data:
         input_ids = tokenizer(sample["text"], return_tensors="pt")
         outputs = F.softmax(model(**input_ids)[0], dim=1).detach().numpy()
-        yhat_prob = outputs[:, 1]
-        yhats_prob.append(yhat_prob)
         yhat = np.argmax(outputs, axis=1)
         yhats.append(yhat[0])
         y = sample["label"]
         ys.append(y)
 
-    return np.array(ys), np.array(yhats), np.array(yhats_prob)
-
-
-def keyword_stack(train_data, test_data, yhat_train, yhat_test):
-    X_train = pd.DataFrame({"keyword": train_data["keyword"]})
-    X_test = pd.DataFrame({"keyword": test_data["keyword"]})
-
-    y_train = np.array(train_data["label"])
-
-    X_train["yhat_llm"] = yhat_train
-    X_test["yhat_llm"] = yhat_test
-
-    features = [
-        "keyword",
-        "yhat_llm"
-    ]
-
-    ml_est = HistGradientBoostingClassifier(
-        categorical_features=[
-            True,
-            False
-        ],
-        class_weight='balanced',
-        random_state=666
-    )
-    ml_est.fit(X_train[features], y_train)
-
-    yhat_train = ml_est.predict(X_train[features])
-    yhat_test = ml_est.predict(X_test[features])
-
-    return yhat_train, yhat_test
+    return np.array(ys), np.array(yhats)
 
 
 def main(args):
@@ -120,8 +87,8 @@ def main(args):
     df_train_full = pd.read_csv("../train.csv")
     df_test = pd.read_csv("../test.csv")
 
-    df_train_full.fillna("", inplace=True)
-    df_test.fillna("", inplace=True)
+    df_train_full = df_train_full[["text", "target"]]
+    df_test = df_test[["text", "id"]]
 
     df_train, df_val = train_test_split(df_train_full, test_size=0.2, random_state=666)
 
@@ -133,10 +100,8 @@ def main(args):
     train_data = train_data.rename_column("target", "label")
     train_data_full = train_data_full.rename_column("target", "label")
     val_data = val_data.rename_column("target", "label")
-    train_data_full = train_data_full.remove_columns(['location'])
-    test_data = test_data.remove_columns(['location'])
-    train_data = train_data.remove_columns(['location', '__index_level_0__'])
-    val_data = val_data.remove_columns(['location', '__index_level_0__'])
+    train_data = train_data.remove_columns(['__index_level_0__'])
+    val_data = val_data.remove_columns(['__index_level_0__'])
 
     tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", token=access_token)
 
@@ -145,41 +110,29 @@ def main(args):
 
     model = DistilBertForSequenceClassification.from_pretrained("outputs")
 
-    y_train, yhat_train_llm, yhat_train_llm_prob = llm_predict(train_data, tokenizer, model)
+    y_train, yhat_train_llm = llm_predict(train_data, tokenizer, model)
     evaluation(y_train, yhat_train_llm)
 
-    y_val, yhat_val_llm, yhat_val_llm_prob = llm_predict(val_data, tokenizer, model)
+    y_val, yhat_val_llm = llm_predict(val_data, tokenizer, model)
     evaluation(y_val, yhat_val_llm)
-
-    yhat_train_stacked, yhat_val_stacked = keyword_stack(train_data, val_data, yhat_train_llm_prob, yhat_val_llm_prob)
-    evaluation(np.array(train_data["label"]), yhat_train_stacked)
-    evaluation(np.array(val_data["label"]), yhat_val_stacked)
 
     # test
     finetuning(train_data_full, val_data, tokenizer)
 
     model = DistilBertForSequenceClassification.from_pretrained("outputs")
 
-    y_train_full, yhat_train_full_llm, yhat_train_full_llm_prob = llm_predict(train_data_full, tokenizer, model)
+    y_train_full, yhat_train_full_llm = llm_predict(train_data_full, tokenizer, model)
     evaluation(y_train_full, yhat_train_full_llm)
 
     yhats = []
-    yhats_prob = []
     for sample in test_data:
         input_ids = tokenizer(sample["text"], return_tensors="pt")
         outputs = F.softmax(model(**input_ids)[0], dim=1).detach().numpy()
-        yhat_prob = outputs[:, 1]
-        yhats_prob.append(yhat_prob)
         yhat = np.argmax(outputs, axis=1)
         yhats.append(yhat[0])
-    yhat_test_llm_prob = np.array(yhats_prob)
-    yhat_test_llm = np.array(yhats)
+    yhat_test = np.array(yhats)
 
-    yhat_train_full_stacked, yhat_test_stacked = keyword_stack(train_data_full, test_data, yhat_train_full_llm_prob, yhat_test_llm_prob)
-    evaluation(y_train_full, yhat_train_full_stacked)
-
-    # pd.concat([df_test["id"], pd.Series(yhat_test_stacked, name="target")], axis=1).to_csv("submission.csv", index=False)
-    pd.concat([df_test["id"], pd.Series(yhat_test_llm, name="target")], axis=1).to_csv("submission.csv", index=False)
+    pd.concat([df_test["id"], pd.Series(yhat_test, name="target")], axis=1).to_csv("submission.csv", index=False)
 
     embed()
 
