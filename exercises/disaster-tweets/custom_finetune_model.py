@@ -53,10 +53,25 @@ class DistilBertClassifier(nn.Module):
     def forward(self, input_ids, attention_mask, train_keyword):
         base_output = self.base_model(input_ids, attention_mask)
         hidden_state = base_output[0]
-        pooled_output = hidden_state[:, 0]
+        # input to pooler
+        cls_embedding = hidden_state[:, 0]
+        # idea behind:
+        # The output from the encoder is a matrix where each row is an enriched representation of
+        # the corresponding token from the input sequence. However, for the task of sequence
+        # classification, what is needed is a vector representation that captures the meaning of
+        # the entire input sequence (not just one token). This could be achieved by taking the
+        # element-wise mean or maximum of all the token representations. Here, we use a special
+        # classification token [CLS] instead. It is placed at the very beginning of each sequence
+        # and was developed for the pre-training phase with next-sentence prediction in mind,
+        # intended to contain a contextualized, high-level representation of the entire sequence
+        # (in its final state), what makes it a good candidate to be pooled for sequence
+        # classification. Rationale: Although nothing makes [CLS] a good sentence representation in
+        # the original pre-trained model (Every token is a weighted aggregate of the whole
+        # sentence.), once you fine-tune it (e.g., for sentence classification of some sorts) you
+        # are specifically training it to become a good sentence representation.
 
         X_keyword_embed = self.keyword_embedding(train_keyword.type(torch.LongTensor).to(device))
-        X = torch.cat([pooled_output, X_keyword_embed], dim=1)
+        X = torch.cat([cls_embedding, X_keyword_embed], dim=1)
 
         X = self.pre_classifier(X)
         X = nn.ReLU()(X)
