@@ -65,10 +65,11 @@ def finetuning():
     )
     trainer.train()
 
+    model.eval()
     yhat = []
     for test_prompt in dataset_val["text"]:
         input_ids = tokenizer(test_prompt, return_tensors="pt")
-        outputs = model.generate(**input_ids, max_new_tokens=1)
+        outputs = model.generate(**input_ids.to(device), max_new_tokens=1)
         output_text = tokenizer.decode(outputs[0][-1])
         output_text = output_text.strip(' ')
         # print(output_text)
@@ -79,6 +80,7 @@ def finetuning():
         yhat.append(output_text)
 
     evaluation(np.array(dataset_val["target"], dtype=int), np.array(yhat))
+    # 0.79 F1 score (compared to 0.83 for encoder-LLM finetuning)
 
     embed()
 

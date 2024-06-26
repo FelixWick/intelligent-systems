@@ -178,7 +178,7 @@ def main(args):
     inference_model = torch.load("outputs/model.pth")
     yhat = predict(inference_model, test_dl)
     evaluation(df_val["target"].values, yhat)
-    # F1 score 0.82 (same as for finetuning without keyword)
+    # F1 score 0.82 (no improvement compared to finetuning without keyword)
 
     embed()
 
