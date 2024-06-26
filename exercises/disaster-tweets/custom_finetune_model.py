@@ -21,7 +21,7 @@ from IPython import embed
 access_token = os.environ['HF_TOKEN']
 
 
-if torch.cuda.is_available():       
+if torch.cuda.is_available():
     device = torch.device("cuda")
     print("Using GPU.")
 else:
@@ -123,17 +123,13 @@ def tokenization(tokenizer, text_data):
 def predict(model, dataloader):
     model.eval()
 
-    yhat = []
-    y = []
-    for input_ids, attention_mask, labels, keyword in dataloader:
+    yhats = np.array([])
+    for input_ids, attention_mask, keyword in dataloader:
         with torch.no_grad():
-            output = F.softmax(model(input_ids, attention_mask, keyword), dim=1).cpu().detach().numpy()
-            output = np.argmax(output, axis=1).tolist()
-            yhat += output
+            outputs = F.softmax(model(input_ids, attention_mask, keyword), dim=1).cpu().detach().numpy()
+            yhats = np.concatenate((yhats, np.argmax(outputs, axis=1)))
 
-        y += labels.tolist()
-
-    return yhat, y
+    return yhats
 
 
 def main(args):
@@ -141,10 +137,8 @@ def main(args):
     torch.manual_seed(666)
 
     df_train_full = pd.read_csv("../train.csv")
-    # df_test = pd.read_csv("../test.csv")
 
     df_train_full.fillna("", inplace=True)
-    # df_test.fillna("", inplace=True)
 
     df_train, df_val = train_test_split(df_train_full, test_size=0.2, random_state=666)
 
@@ -178,17 +172,13 @@ def main(args):
     test_keyword = pd.DataFrame({"keyword": df_val["keyword"]})
     test_keyword = torch.tensor(enc.transform(test_keyword)).view(-1).float().to(device)
 
-    labels_test = torch.tensor(df_val["target"].tolist()).to(device)
-
-    test_dataset = TensorDataset(input_ids_test.to(device), attention_mask_test.to(device), labels_test, test_keyword)
+    test_dataset = TensorDataset(input_ids_test.to(device), attention_mask_test.to(device), test_keyword)
     test_dl = DataLoader(test_dataset, batch_size=128)
 
     inference_model = torch.load("outputs/model.pth")
-
-    yhat, y = predict(inference_model, test_dl)
-
-    evaluation(y, yhat)
-    # F1 score 0.83 (0.82 for finetuning without keyword)
+    yhat = predict(inference_model, test_dl)
+    evaluation(df_val["target"].values, yhat)
+    # F1 score 0.82 (same as for finetuning without keyword)
 
     embed()
 

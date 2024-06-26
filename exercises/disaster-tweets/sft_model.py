@@ -1,5 +1,6 @@
 import os
 
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from trl import SFTTrainer, SFTConfig
@@ -16,6 +17,14 @@ from IPython import embed
 
 
 access_token = os.environ['HF_TOKEN']
+
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Using GPU.")
+else:
+    print("No GPU available, using the CPU instead.")
+    device = torch.device("cpu")
 
 
 def evaluation(y, yhat):
@@ -48,7 +57,7 @@ def finetuning():
     )
 
     trainer = SFTTrainer(
-        model=model,
+        model=model.to(device),
         train_dataset=dataset_train,
         tokenizer=tokenizer,
         args=sft_config,

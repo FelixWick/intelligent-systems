@@ -3,6 +3,7 @@ import os
 
 import torch
 import torch.nn.functional as F
+from torch.utils.data import DataLoader
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,14 @@ from IPython import embed
 access_token = os.environ['HF_TOKEN']
 
 
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print("Using GPU.")
+else:
+    print("No GPU available, using the CPU instead.")
+    device = torch.device("cpu")
+
+
 def evaluation(y, yhat):
     print('accuracy: ', accuracy_score(y, yhat))
     print('f1_score: ', f1_score(y, yhat))
@@ -32,12 +41,23 @@ def finetuning(train_data, val_data, tokenizer):
     model = DistilBertForSequenceClassification.from_pretrained(
         "distilbert-base-uncased",
         num_labels = 2,
-    )
+    ).to(device)
     print(model)
 
+    # only 0.75 F1 score without finetuning pre-trained layers
+    # 0.78 with finetuning last ffn block of pre-trained layers only
+    # 0.83 with full finetuning
     # for param in model.base_model.parameters():
     #     param.requires_grad = False
-    # only 0.75 F1 score without finetuning pre-trained layers (0.82 with)
+    # for param in model.base_model.transformer.layer[5].ffn.parameters():
+    #     param.requires_grad = True
+    # for param in model.base_model.transformer.layer[5].output_layer_norm.parameters():
+    #     param.requires_grad = True
+
+    pytorch_total_params = sum(p.numel() for p in model.base_model.parameters() if p.requires_grad)
+    print(pytorch_total_params)
+    pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(pytorch_total_params)
 
     train_data = train_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
     val_data = val_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
@@ -66,18 +86,16 @@ def finetuning(train_data, val_data, tokenizer):
     model.save_pretrained("outputs")
 
 
-def llm_predict(data, tokenizer, model):
-    yhats = []
-    ys = []
-    for sample in data:
-        input_ids = tokenizer(sample["text"], return_tensors="pt")
-        outputs = F.softmax(model(**input_ids)[0], dim=1).detach().numpy()
-        yhat = np.argmax(outputs, axis=1)
-        yhats.append(yhat[0])
-        y = sample["label"]
-        ys.append(y)
+def predict(data, tokenizer, model):
+    model.eval()
 
-    return np.array(ys), np.array(yhats)
+    yhats = np.array([])
+    for samples in DataLoader(data, batch_size=32):
+        input_ids = tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True, return_tensors="pt")
+        outputs = F.softmax(model(**input_ids.to(device))[0], dim=1).cpu().detach().numpy()
+        yhats = np.concatenate((yhats, np.argmax(outputs, axis=1)))
+
+    return yhats
 
 
 def main(args):
@@ -108,30 +126,23 @@ def main(args):
     # validation
     finetuning(train_data, val_data, tokenizer)
 
-    model = DistilBertForSequenceClassification.from_pretrained("outputs")
+    model = DistilBertForSequenceClassification.from_pretrained("outputs").to(device)
 
-    y_train, yhat_train_llm = llm_predict(train_data, tokenizer, model)
-    evaluation(y_train, yhat_train_llm)
+    yhat_train_llm = predict(train_data, tokenizer, model)
+    evaluation(np.array(train_data["label"]), yhat_train_llm)
 
-    y_val, yhat_val_llm = llm_predict(val_data, tokenizer, model)
-    evaluation(y_val, yhat_val_llm)
+    yhat_val_llm = predict(val_data, tokenizer, model)
+    evaluation(np.array(val_data["label"]), yhat_val_llm)
 
     # test
     finetuning(train_data_full, val_data, tokenizer)
 
-    model = DistilBertForSequenceClassification.from_pretrained("outputs")
+    model = DistilBertForSequenceClassification.from_pretrained("outputs").to(device)
 
-    y_train_full, yhat_train_full_llm = llm_predict(train_data_full, tokenizer, model)
-    evaluation(y_train_full, yhat_train_full_llm)
+    yhat_train_full_llm = predict(train_data_full, tokenizer, model)
+    evaluation(np.array(train_data_full["label"]), yhat_train_full_llm)
 
-    yhats = []
-    for sample in test_data:
-        input_ids = tokenizer(sample["text"], return_tensors="pt")
-        outputs = F.softmax(model(**input_ids)[0], dim=1).detach().numpy()
-        yhat = np.argmax(outputs, axis=1)
-        yhats.append(yhat[0])
-    yhat_test = np.array(yhats)
-
+    yhat_test = predict(test_data, tokenizer, model)
     pd.concat([df_test["id"], pd.Series(yhat_test, name="target")], axis=1).to_csv("submission.csv", index=False)
 
     embed()
