@@ -94,7 +94,6 @@ def main(args):
     validation_groups = np.random.randint(0, len(df_train_full["group"].unique()), size=1000)
     df_val = df_train_full.loc[df_train_full["group"].isin(validation_groups)]
     df_train = df_train_full.loc[~df_train_full["group"].isin(validation_groups)]
-    df_train = feature_engineering(df_train)
 
     features = [
         "number_in_group",
