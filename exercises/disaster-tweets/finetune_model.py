@@ -92,7 +92,9 @@ def predict(data, tokenizer, model):
     yhats = np.array([])
     for samples in DataLoader(data, batch_size=32):
         input_ids = tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True, return_tensors="pt")
-        outputs = F.softmax(model(**input_ids.to(device))[0], dim=1).cpu().detach().numpy()
+        outputs = model(**input_ids.to(device))[0].cpu().detach().numpy()
+        # outputs = F.softmax(model(**input_ids.to(device))[0], dim=1).cpu().detach().numpy()
+        # For language outputs, one would often sample from the softmax probabilities.
         yhats = np.concatenate((yhats, np.argmax(outputs, axis=1)))
 
     return yhats

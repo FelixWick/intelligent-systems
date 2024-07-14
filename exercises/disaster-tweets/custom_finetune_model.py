@@ -126,7 +126,9 @@ def predict(model, dataloader):
     yhats = np.array([])
     for input_ids, attention_mask, keyword in dataloader:
         with torch.no_grad():
-            outputs = F.softmax(model(input_ids, attention_mask, keyword), dim=1).cpu().detach().numpy()
+            outputs = model(input_ids, attention_mask, keyword).cpu().detach().numpy()
+            # outputs = F.softmax(model(input_ids, attention_mask, keyword), dim=1).cpu().detach().numpy()
+            # For language outputs, one would often sample from the softmax probabilities.
             yhats = np.concatenate((yhats, np.argmax(outputs, axis=1)))
 
     return yhats
