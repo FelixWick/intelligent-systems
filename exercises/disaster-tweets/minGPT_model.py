@@ -101,9 +101,9 @@ def main(pretrained):
     train_config.max_iters = 10000
     # train_config.epochs = 10
     # 0.72 F1 score for training from scratch
-    # (0.83 with encoder-LLM finetuning)
     train_config.epochs = 5
     # 0.76 for GPT2 finetuning (--pretrained)
+    # (0.83 for GPT2ForSequenceClassification finetuning --> better padding)
     train_config.num_workers = 0
     train_config.batch_size = 32
     trainer = Trainer(train_config, model, train_dataset)
