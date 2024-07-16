@@ -5,7 +5,6 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 from trl import SFTTrainer, SFTConfig
 from datasets import Dataset
-# from peft import LoraConfig
 
 import numpy as np
 import pandas as pd
@@ -61,7 +60,6 @@ def finetuning():
         train_dataset=dataset_train,
         tokenizer=tokenizer,
         args=sft_config,
-        # peft_config=LoraConfig(),
     )
     trainer.train()
 

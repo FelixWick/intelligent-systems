@@ -16,6 +16,8 @@ from datasets import Dataset
 
 import evaluate
 
+# from peft import LoraConfig, get_peft_model, TaskType
+
 from IPython import embed
 
 
@@ -54,10 +56,20 @@ def finetuning(train_data, val_data, tokenizer):
     # for param in model.base_model.transformer.layer[5].output_layer_norm.parameters():
     #     param.requires_grad = True
 
-    pytorch_total_params = sum(p.numel() for p in model.base_model.parameters() if p.requires_grad)
-    print(pytorch_total_params)
-    pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(pytorch_total_params)
+    print(sum(p.numel() for p in model.base_model.parameters() if p.requires_grad))
+    print(sum(p.numel() for p in model.parameters() if p.requires_grad))
+
+    # lora_config = LoraConfig(
+    #     r=8,
+    #     lora_alpha=32,
+    #     lora_dropout=0.05,
+    #     target_modules=["q_lin", "k_lin", "v_lin"],
+    #     bias='none',
+    #     task_type=TaskType.SEQ_CLS
+    # )
+    # peft_model = get_peft_model(model, lora_config)
+    # print(sum(p.numel() for p in peft_model.parameters() if p.requires_grad))
+    # 0.79 with LoRA finetuning
 
     train_data = train_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
     val_data = val_data.map(lambda samples: tokenizer(samples["text"], max_length=300, padding="max_length", truncation=True), batched=True)
@@ -76,6 +88,7 @@ def finetuning(train_data, val_data, tokenizer):
 
     trainer = Trainer(
         model=model,
+        # model=peft_model,
         train_dataset=train_data,
         eval_dataset=val_data,
         args=training_args,
@@ -84,6 +97,7 @@ def finetuning(train_data, val_data, tokenizer):
     trainer.train()
 
     model.save_pretrained("outputs")
+    # peft_model.save_pretrained("outputs")
 
 
 def predict(data, tokenizer, model):
