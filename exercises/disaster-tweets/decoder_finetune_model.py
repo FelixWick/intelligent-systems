@@ -127,7 +127,7 @@ def main(args):
 
     yhat_val_llm = predict(val_data, tokenizer, model)
     evaluation(np.array(val_data["label"]), yhat_val_llm)
-    # 0.83 F1 score (about the same as encoder-LLM finetuning)
+    # 0.81 F1 score (0.83 for encoder-LLM finetuning)
 
     # test
     finetuning(train_data_full, val_data, tokenizer)
