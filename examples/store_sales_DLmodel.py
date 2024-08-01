@@ -19,6 +19,10 @@ from IPython import embed
 embeddings = True
 
 
+# to use your GPU via CUDA:
+# - run the command nvidia-smi on terminal to find out your CUDA version, e.g., 11.6
+# - install the corresponding pytorch wheel, e.g., pip install torch==1.13 --index-url https://download.pytorch.org/whl/cu116
+
 if torch.cuda.is_available():
     dev = "cuda:0"
 else:
@@ -31,7 +35,7 @@ def backtransform(df):
     return df
 
 
-def train_evaluation(y, yhat):
+def evaluation(y, yhat):
     print('RMSLE: ', root_mean_squared_log_error(y, yhat))
     print('mean(y): ', np.mean(y))
 
@@ -44,13 +48,6 @@ def feature_engineering(df):
 
     df['td'] = (df['date'] - pd.to_datetime("2013-01-01")).dt.days
 
-    return df
-
-
-def ewma_prediction(df, group_cols, col, alpha, horizon, suffix=''):
-    df.sort_values(["date"], inplace=True)
-    df_grouped = df.groupby(group_cols, group_keys=False)
-    df["ewma_{}".format(col + suffix)] = df_grouped[col].apply(lambda x: x.shift(horizon).ewm(alpha=alpha, ignore_na=True).mean())
     return df
 
 
@@ -67,20 +64,20 @@ class FF_NN_emb(nn.Module):
         super().__init__()
 
         if embeddings == True:
-            self.family_embedding = nn.Embedding(33, 15)
-            self.store_embedding = nn.Embedding(54, 15)
+            self.family_embedding = nn.Embedding(33, 25)
+            self.store_embedding = nn.Embedding(54, 25)
             self.mlp = nn.Sequential(
-                nn.Linear(38, 20),
+                nn.Linear(57, 50),
                 nn.ReLU(),
-                nn.BatchNorm1d(20),
-                nn.Linear(20, 10),
+                nn.BatchNorm1d(50),
+                nn.Linear(50, 25),
                 nn.ReLU(),
-                nn.BatchNorm1d(10),
-                nn.Linear(10, 1)
+                nn.BatchNorm1d(25),
+                nn.Linear(25, 1)
             )
         else:
             self.mlp = nn.Sequential(
-                nn.Linear(95, 50),
+                nn.Linear(94, 50),
                 nn.ReLU(),
                 nn.BatchNorm1d(50),
                 nn.Linear(50, 25),
@@ -99,7 +96,6 @@ class FF_NN_emb(nn.Module):
 
 def get_model():
     model = FF_NN_emb()
-    # optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
     optimizer = optim.Adam(model.parameters())
     return model, optimizer
 
@@ -121,14 +117,12 @@ def fit(epochs, model, optimizer, train_dl, valid_dl):
             optimizer.step()
             optimizer.zero_grad()
 
-        print('epoch {}, loss {}'.format(epoch, loss.item()))
-
         model.eval()
-
         with torch.no_grad():
+            train_loss = sum(loss_func(model(X_mb), y_mb) for X_mb, y_mb in train_dl)
             valid_loss = sum(loss_func(model(X_mb), y_mb) for X_mb, y_mb in valid_dl)
-
-        print(epoch, valid_loss / len(valid_dl))
+        print('epoch {}, training loss {}'.format(epoch + 1, train_loss / len(train_dl)))
+        print('epoch {}, validation loss {}'.format(epoch + 1, valid_loss / len(valid_dl)))
 
     print('Finished training')
 
@@ -143,13 +137,11 @@ def get_data(train_ds, valid_ds, bs):
 
 
 def nn_prepro(df):
-    df['dcoilwtico'].ffill(inplace=True)
-    df['ewma_sales_transformed_week'].bfill(inplace=True)
+    df['dcoilwtico'] = df['dcoilwtico'].ffill()
     df.fillna(-999, inplace=True)
 
     normalized_features = [
         'td',
-        'ewma_sales_transformed_week',
         'dayofweek',
         'dayofyear',
         'dayofmonth',
@@ -195,9 +187,6 @@ def main(args):
 
     df_train_full["sales_transformed"] = np.log(1 + df_train_full["sales"])
 
-    ewma_groups = ["store_nbr", "family", "dayofweek"]
-    df_train_full = ewma_prediction(df_train_full, ewma_groups, "sales_transformed", 0.15, 1, suffix="_week")
-
     df_train_full = nn_prepro(df_train_full)
 
     df_train = df_train_full[df_train_full["date"] <= "2017-07-30"].reset_index()
@@ -205,7 +194,6 @@ def main(args):
 
     features = [
         "td",
-        "ewma_sales_transformed_week",
         "dayofweek",
         "dayofyear",
         "dayofmonth",
@@ -233,19 +221,22 @@ def main(args):
     model, optimizer = get_model()
     model = model.to(device)
 
-    epochs = 20
+    epochs = 40
     trained_model = fit(epochs, model, optimizer, train_dl, valid_dl)
 
     # training data
     df_train["yhat"] = trained_model(train_ds[:][0]).cpu().detach().numpy().flatten()
     df_train["yhat"] = np.clip(df_train["yhat"], 0, None)
     df_train = backtransform(df_train)
-    train_evaluation(df_train["sales"], df_train["yhat"])
+    evaluation(df_train["sales"], df_train["yhat"])
     # validation data
     df_val["yhat"] = trained_model(val_ds[:][0]).cpu().detach().numpy().flatten()
     df_val["yhat"] = np.clip(df_val["yhat"], 0, None)
     df_val = backtransform(df_val)
-    train_evaluation(df_val["sales"], df_val["yhat"])
+    evaluation(df_val["sales"], df_val["yhat"])
+    # one-hot: RMSLE 0.49
+    # embeddings: RMSLE 0.47
+    # Gradient Boosting (with same features) for comparison: RMSLE 0.54
 
     embed()
 
