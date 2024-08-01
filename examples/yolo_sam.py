@@ -6,8 +6,7 @@ from ultralytics import YOLO
 
 import cv2
 
-from segment_anything import sam_model_registry
-from segment_anything import SamPredictor
+from segment_anything import sam_model_registry, SamPredictor
 
 from IPython import embed
 
