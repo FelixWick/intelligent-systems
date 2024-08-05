@@ -1,8 +1,6 @@
 import sys
 
-import requests
-
-# import ollama
+import ollama
 import chromadb
 
 import pandas as pd
@@ -15,10 +13,8 @@ from IPython import embed
 
 
 use_rag = True
-just_use_closest_label = False
-validation_run = True
-fast_test = False
-create_collection = False
+use_closest_label = False
+create_collection = True
 
 
 def evaluation(y, yhat):
@@ -48,7 +44,7 @@ Inquiry: {}
     else:
         example_string = ""
 
-    # 0.72 F1 score with closest example (0.74 without example, 0.77 with two generic ones)
+    # 0.74 F1 score with closest example (0.74 without example, 0.76 with two generic ones)
     prompt = example_string + """
 <<<
 Inquiry: {}
@@ -57,23 +53,13 @@ Inquiry: {}
     # print(instruction)
     # print(prompt)
 
-    json_data = {
-        "model": "mistral",
-        "system": instruction,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"num_predict": 3, "seed": 42, "temperature": 0},
-    }
-    response = requests.post('http://localhost:11434/api/generate', json=json_data)
-    yhat = response.json()["response"]
-
-    # output = ollama.generate(
-    #     model="mistral",
-    #     system=instruction,
-    #     prompt=prompt,
-    #     options={"num_predict": 3, "seed": 42, "temperature": 0},
-    # )
-    # yhat = output['response']
+    output = ollama.generate(
+        model="mistral",
+        system=instruction,
+        prompt=prompt,
+        options={"num_predict": 3, "seed": 42, "temperature": 0},
+    )
+    yhat = output['response']
 
     yhat = yhat.strip(' .')
 
@@ -96,19 +82,11 @@ Inquiry: {}
 def retrieve(collection, embedding_model, prompt):
     # generate an embedding for the prompt and retrieve the most relevant example
 
-    json_data = {
-        "model": embedding_model,
-        "prompt": prompt,
-        "stream": False
-    }
-    response = requests.post('http://localhost:11434/api/embeddings', json=json_data)
-    query_embedding = response.json()["embedding"]
-
-    # response = ollama.embeddings(
-    #     prompt=prompt,
-    #     model=embedding_model
-    # )
-    # query_embedding = response["embedding"]
+    response = ollama.embeddings(
+        prompt=prompt,
+        model=embedding_model
+    )
+    query_embedding = response["embedding"]
 
     results = collection.query(
         query_embeddings=[query_embedding],
@@ -123,16 +101,8 @@ def create_embeddings(collection, examples, embedding_model):
     # store each example in a vector embedding database
 
     for i, e in enumerate(examples):
-        json_data = {
-            "model": embedding_model,
-            "prompt": e,
-            "stream": False
-        }
-        response = requests.post('http://localhost:11434/api/embeddings', json=json_data)
-        embedding = response.json()["embedding"]
-
-        # response = ollama.embeddings(model=embedding_model, prompt=e)
-        # embedding = response["embedding"]
+        response = ollama.embeddings(model=embedding_model, prompt=e)
+        embedding = response["embedding"]
 
         collection.add(
             ids=[str(i)],
@@ -176,59 +146,29 @@ def main(args):
     embedding_model = "all-minilm"
     client = chromadb.PersistentClient(path="disaster-tweets-train-embeddings")
 
-    if validation_run:
-        examples = []
-        for i in range(len(X_train)):
-            examples.append("{} {}".format(X_train["text"].values[i], y_train.values[i]))
+    examples = []
+    for i in range(len(X_train)):
+        examples.append("{} {}".format(X_train["text"].values[i], y_train.values[i]))
 
-        if create_collection:
-            # client.delete_collection(name="train-valid")
-            collection = client.create_collection(name="train-valid")
-            create_embeddings(collection, examples, embedding_model)
-        else:
-            collection = client.get_collection(name="train-valid")
-
-        if fast_test:
-            test_samples = np.random.choice(range(len(X_test)), 100, replace=False)
-            X_test = X_test.iloc[test_samples]
-            y_test = y_test.iloc[test_samples]
-
-        if use_rag:
-            closest_train_samples = retrieve_closest_train_sample(X_test, collection, embedding_model)
-            if just_use_closest_label:
-                yhat = []
-                for i in closest_train_samples:
-                    yhat.append(int(i[-1]))
-            else:
-                yhat = generate_yhat(X_test, closest_train_samples)
-        else:
-            yhat = generate_yhat(X_test)
-
-        evaluation(y_test.to_numpy(), np.array(yhat))
+    if create_collection:
+        client.delete_collection(name="train-valid")
+        collection = client.create_collection(name="train-valid")
+        create_embeddings(collection, examples, embedding_model)
     else:
-        examples = []
-        for i in range(len(df_train)):
-            examples.append("{} {}".format(df_train["text"].values[i], y.values[i]))
+        collection = client.get_collection(name="train-valid")
 
-        if create_collection:
-            # client.delete_collection(name="train-full")
-            collection = client.create_collection(name="train-full")
-            create_embeddings(collection, examples, embedding_model)
+    if use_rag:
+        closest_train_samples = retrieve_closest_train_sample(X_test, collection, embedding_model)
+        if use_closest_label: # 0.73 F1 score
+            yhat = []
+            for i in closest_train_samples:
+                yhat.append(int(i[-1]))
         else:
-            collection = client.get_collection(name="train-full")
+            yhat = generate_yhat(X_test, closest_train_samples)
+    else:
+        yhat = generate_yhat(X_test)
 
-        if use_rag:
-            closest_train_samples = retrieve_closest_train_sample(df_test, collection, embedding_model)
-            if just_use_closest_label:
-                yhat = []
-                for i in closest_train_samples:
-                    yhat.append(int(i[-1]))
-            else:
-                yhat = generate_yhat(df_test, closest_train_samples)
-        else:
-            yhat = generate_yhat(df_test)
-
-        pd.concat([df_test["id"], pd.Series(yhat, name="target")], axis=1).to_csv("submission.csv", index=False)
+    evaluation(y_test.to_numpy(), np.array(yhat))
 
     embed()
 

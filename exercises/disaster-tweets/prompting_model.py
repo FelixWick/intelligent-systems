@@ -47,7 +47,7 @@ You will only respond with '1' or '0'. Do not provide any explanations or notes.
     for i in range(len(X_test)):
         inquiry = X_test["text"].iloc[i]
 
-        # 0.77 F1 score with examples (0.74 without)
+        # 0.76 F1 score with the two generic examples (0.74 without)
         prompt = examples_string + """
 <<<
 Inquiry: {}
