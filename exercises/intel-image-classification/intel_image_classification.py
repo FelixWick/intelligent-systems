@@ -17,15 +17,25 @@ import numpy as np
 from IPython import embed
 
 
+# for GPU usage, e.g.:
+# pip install torch==1.13 torchvision==0.14 --index-url https://download.pytorch.org/whl/cu116
+
+if torch.cuda.is_available():
+    dev = "cuda:0"
+else:
+    dev = "cpu"
+device = torch.device(dev)
+
+
 def evaluate(model, test_loader):    
     model.eval()
     accuracy = 0
     with torch.no_grad():  # this stops pytorch doing computational graph stuff under-the-hood and saves memory and time
         for X, y in test_loader:
             y_hat = model(X)
-            y_hat = F.softmax(y_hat, dim=1).detach().numpy()
+            y_hat = F.softmax(y_hat, dim=1).cpu().numpy()
             y_hat = np.argmax(y_hat, axis=1)
-            accuracy += (y_hat == y.detach().numpy()).mean()
+            accuracy += (y_hat == y.cpu().numpy()).mean()
     accuracy /= len(test_loader)  # avg accuracy
 
     return accuracy
@@ -50,8 +60,6 @@ def fit(epochs, model, optimizer, train_dl):
 
         print('epoch {}, loss {}'.format(epoch, loss.item()))
 
-        model.eval()
-
     print('Finished training')
 
     return model
@@ -75,10 +83,31 @@ def finetune(model, train_dl):
 
     optimizer = optim.Adam(model.parameters())
 
+    # put to GPU:
+    train_dl = WrappedDataLoader(train_dl, put_to_gpu)
+    model = model.to(device)
+
     epochs = 10
     trained_model = fit(epochs, model, optimizer, train_dl)
 
     return trained_model
+
+
+class WrappedDataLoader:
+    def __init__(self, dl, func):
+        self.dl = dl
+        self.func = func
+
+    def __len__(self):
+        return len(self.dl)
+
+    def __iter__(self):
+        for b in self.dl:
+            yield (self.func(*b))
+
+
+def put_to_gpu(x, y):
+    return x.to(device), y.to(device)
 
 
 def main(args):
@@ -90,16 +119,11 @@ def main(args):
 
     alexnet = models.alexnet(pretrained=True)
 
-    # finetune
     train_ds = ImageFolder(root="seg_train", transform=data_transforms)
     mini_batch_size = 512
-    train_dl = DataLoader(train_ds, batch_size=mini_batch_size, shuffle=True, drop_last=False)
-    trained_model = finetune(alexnet, train_dl)
+    train_dl = DataLoader(train_ds, batch_size=mini_batch_size, shuffle=True)
 
-    # test image
-    # put the model to eval mode for testing
-    # alexnet.eval()
-    # output = alexnet(batch_img)
+    trained_model = finetune(alexnet, train_dl)
     trained_model.eval()
 
     test_image = Image.open("seg_test/sea/21191.jpg")
@@ -110,7 +134,7 @@ def main(args):
     batch_img = torch.unsqueeze(transformed_img, 0)
     print("image batch's shape: " + str(batch_img.shape))
 
-    output = trained_model(batch_img)
+    output = trained_model.to('cpu')(batch_img)
 
     print("output vector's shape: " + str(output.shape))
     percentage = F.softmax(output, dim=1)[0] * 100.0
@@ -126,10 +150,10 @@ def main(args):
 
     # test run
     test_ds = ImageFolder(root="seg_test", transform=data_transforms)
-    mini_batch_size = 512 * 2
-    test_dl = DataLoader(test_ds, batch_size=mini_batch_size)
-    accuracy = evaluate(trained_model, test_dl)
+    test_dl = DataLoader(test_ds, batch_size=mini_batch_size*2)
+    accuracy = evaluate(trained_model.to(device), WrappedDataLoader(test_dl, put_to_gpu))
     print("accuracy: " + str(accuracy))
+    # accuracy: 92%
 
     embed()
 

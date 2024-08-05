@@ -13,7 +13,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 from IPython import embed
 
@@ -22,6 +22,7 @@ class CNN(nn.Module):
     def __init__(self):
         super().__init__()
 
+        # validation accuracy 99.3%
         self.cnn = nn.Sequential(
             nn.Conv2d(in_channels=1, out_channels=10, kernel_size=5, padding=2),
             nn.BatchNorm2d(10),
@@ -44,10 +45,9 @@ class CNN(nn.Module):
             nn.Linear(300, 100),
             nn.ReLU(),
             nn.Dropout(0.4),
-            nn.Linear(100, 10),
-            # nn.Softmax(dim=1)
+            nn.Linear(100, 10)
 
-        # LeNet
+        # LeNet (# validation accuracy 98.2%, with 50 epochs)
         # self.cnn = nn.Sequential(
         #     nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, padding=2),
         #     nn.Sigmoid(),
@@ -85,15 +85,12 @@ def fit(epochs, model, optimizer, train_dl, valid_dl=None):
             optimizer.step()
             optimizer.zero_grad()
 
-        print('epoch {}, loss {}'.format(epoch, loss.item()))
-
         model.eval()
-
-        if valid_dl:
-            with torch.no_grad():
-                valid_loss = sum(loss_func(model(X_mb), y_mb) for X_mb, y_mb in valid_dl)
-
-            print(epoch, valid_loss / len(valid_dl))
+        with torch.no_grad():
+            train_loss = sum(loss_func(model(X_mb), y_mb) for X_mb, y_mb in train_dl)
+            valid_loss = sum(loss_func(model(X_mb), y_mb) for X_mb, y_mb in valid_dl)
+        print('epoch {}, training loss {}'.format(epoch + 1, train_loss / len(train_dl)))
+        print('epoch {}, validation loss {}'.format(epoch + 1, valid_loss / len(valid_dl)))
 
     print('Finished training')
 
@@ -114,6 +111,7 @@ def get_data(train_ds, valid_ds, bs):
 
 
 def main(args):
+    np.random.seed(666)
     torch.manual_seed(666)
 
     if torch.cuda.is_available():
@@ -125,12 +123,6 @@ def main(args):
     df = pd.read_csv("train.csv")
     y = df["label"]
     X = df.drop(columns="label")
-
-    # for i in range(20, 50):
-    #     example_image = np.asarray(X.iloc[i]).reshape(28, 28)
-    #     plt.imshow(example_image, cmap='gray', vmin=0, vmax=255)
-    #     plt.savefig("plots/digit_train_{}.png".format(i))
-    #     plt.clf()
 
     df_test = pd.read_csv("test.csv")
 
@@ -145,11 +137,9 @@ def main(args):
 
     X_test = np.asarray(df_test).reshape(-1, 28, 28)
 
-    # mini_batch_size = 1024
     mini_batch_size = 512
-    # mini_batch_size = 256
 
-    epochs = 50
+    epochs = 20
 
     model, optimizer = get_model()
     model = model.to(device)
@@ -158,11 +148,11 @@ def main(args):
     if validation_run:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        target_train = torch.tensor(F.one_hot(torch.tensor(y_train)), dtype=torch.float32).to(device)
+        target_train = F.one_hot(torch.tensor(y_train)).to(torch.float32).to(device)
         train = torch.tensor(X_train, dtype=torch.float32).unsqueeze(1).to(device)
         train_ds = TensorDataset(train, target_train)
 
-        target_test = torch.tensor(F.one_hot(torch.tensor(y_test)), dtype=torch.float32).to(device)
+        target_test = F.one_hot(torch.tensor(y_test)).to(torch.float32).to(device)
         test = torch.tensor(X_test, dtype=torch.float32).unsqueeze(1).to(device)
         test_ds = TensorDataset(test, target_test)
 
@@ -170,13 +160,13 @@ def main(args):
 
         trained_model = fit(epochs, model, optimizer, train_dl, valid_dl)
 
-        train_preds = trained_model(train_ds[:][0]).cpu()
-        train_preds = F.softmax(train_preds, dim=1).detach().numpy()
+        with torch.no_grad():
+            train_preds = trained_model(train_ds[:][0]).cpu()
         yhat = np.argmax(train_preds, axis=1)
         print('accuracy: ', accuracy_score(y_train, yhat))
 
-        test_preds = trained_model(test_ds[:][0]).cpu()
-        test_preds = F.softmax(test_preds, dim=1).detach().numpy()
+        with torch.no_grad():
+            test_preds = trained_model(test_ds[:][0]).cpu()
         yhat = np.argmax(test_preds, axis=1)
         print('accuracy: ', accuracy_score(y_test, yhat))
     else:
@@ -188,16 +178,16 @@ def main(args):
 
         trained_model = fit(epochs, model, optimizer, train_dl)
 
-        train_preds = trained_model(train_ds[:][0]).cpu()
-        train_preds = F.softmax(train_preds, dim=1).detach().numpy()
+        with torch.no_grad():
+            train_preds = trained_model(train_ds[:][0]).cpu()
         yhat = np.argmax(train_preds, axis=1)
         print('accuracy: ', accuracy_score(y, yhat))
 
         test = torch.tensor(X_test, dtype=torch.float32).unsqueeze(1).to(device)
         test_ds = TensorDataset(test)
 
-        test_preds = trained_model(test_ds[:][0]).cpu()
-        test_preds = F.softmax(test_preds, dim=1).detach().numpy()
+        with torch.no_grad():
+            test_preds = trained_model(test_ds[:][0]).cpu()
         yhat = np.argmax(test_preds, axis=1)
         df_test["ImageId"] = df_test.index + 1
         pd.concat([df_test["ImageId"], pd.Series(yhat, name="Label")], axis=1).to_csv("submission.csv", index=False)
