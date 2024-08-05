@@ -1,5 +1,3 @@
-import os
-
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -13,9 +11,6 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 
 from IPython import embed
-
-
-access_token = os.environ['HF_TOKEN']
 
 
 if torch.cuda.is_available():
@@ -45,8 +40,8 @@ def finetuning():
     dataset_val = Dataset.from_pandas(df_val)
 
     model_id = "facebook/opt-350m"
-    tokenizer = AutoTokenizer.from_pretrained(model_id, token=access_token)
-    model = AutoModelForCausalLM.from_pretrained(model_id, token=access_token)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id)
 
     sft_config = SFTConfig(
         output_dir=".",

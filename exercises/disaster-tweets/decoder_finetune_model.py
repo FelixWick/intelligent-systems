@@ -1,5 +1,4 @@
 import sys
-import os
 
 import torch
 from torch.utils.data import DataLoader
@@ -16,9 +15,6 @@ from datasets import Dataset
 import evaluate
 
 from IPython import embed
-
-
-access_token = os.environ['HF_TOKEN']
 
 
 if torch.cuda.is_available():
@@ -112,7 +108,7 @@ def main(args):
     train_data = train_data.remove_columns(['__index_level_0__'])
     val_data = val_data.remove_columns(['__index_level_0__'])
 
-    tokenizer = AutoTokenizer.from_pretrained("gpt2", token=access_token)
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
     # A decoder-LLM does classification on the last token, by generating its prediction as next one.
     tokenizer.padding_side = "left"
     tokenizer.pad_token = tokenizer.eos_token

@@ -1,8 +1,7 @@
 import sys
-import os
 
 import torch
-import torch.nn.functional as F
+# import torch.nn.functional as F
 from torch import nn, optim
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -16,9 +15,6 @@ from sklearn.model_selection import train_test_split
 from transformers import AutoTokenizer, DistilBertModel
 
 from IPython import embed
-
-
-access_token = os.environ['HF_TOKEN']
 
 
 if torch.cuda.is_available():
@@ -144,7 +140,7 @@ def main(args):
 
     df_train, df_val = train_test_split(df_train_full, test_size=0.2, random_state=666)
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", token=access_token)
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
     # finetuning
     input_ids_train, attention_mask_train = tokenization(tokenizer, df_train["text"].tolist())

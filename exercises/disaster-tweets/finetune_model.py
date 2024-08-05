@@ -1,8 +1,7 @@
 import sys
-import os
 
 import torch
-import torch.nn.functional as F
+# import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 import numpy as np
@@ -19,9 +18,6 @@ import evaluate
 # from peft import LoraConfig, get_peft_model, TaskType
 
 from IPython import embed
-
-
-access_token = os.environ['HF_TOKEN']
 
 
 if torch.cuda.is_available():
@@ -137,7 +133,7 @@ def main(args):
     train_data = train_data.remove_columns(['__index_level_0__'])
     val_data = val_data.remove_columns(['__index_level_0__'])
 
-    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", token=access_token)
+    tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
 
     # validation
     finetuning(train_data, val_data, tokenizer)
